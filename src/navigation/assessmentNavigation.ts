@@ -6,23 +6,53 @@ import { drawObserveOverlay, clearOverlays } from "../utils/overlay";
 export async function navigateToAssessment(page: Page, context: BrowserContext) {
   log("Navigating to academic functions");
   try {
-    // Wait for dashboard to load
-    await page.waitForLoadState("domcontentloaded", { timeout: 15000 });
+    // Wait for dashboard to load with increased timeout
+    await page.waitForLoadState("networkidle", { timeout: 30000 });
+    
+    // Add a fixed delay to ensure UI is fully rendered
+    await page.waitForTimeout(5000);
 
-    // Poll for menu visibility
+    // Poll for menu visibility with increased timeout
     await page.waitForFunction(
       () => {
         const menu = document.querySelector(".navbar, [role='navigation'], #menu, .nav, .menu, [id*='nav'], [class*='nav']");
         return !!menu && menu.isConnected && window.getComputedStyle(menu).display !== "none";
       },
-      { timeout: 20000, polling: 500 }
+      { timeout: 30000, polling: 1000 }
     );
 
-    await clickWithRetry(page, "Click the 'Academic Functions', 'Academics', 'Academic', or 'Menu' link or button in the navigation bar or dashboard", {
-      retries: 3,
-      timeout: 15000,
-    });
-    await page.waitForTimeout(4000); // Increased for dropdown rendering
+    // Try multiple selectors for academic functions
+    const academicSelectors = [
+      "a:has-text('Academic Functions')", 
+      "a:has-text('Academics')",
+      "button:has-text('Academic')",
+      ".nav-item:has-text('Academic')"
+    ];
+    
+    // Try each selector
+    let clicked = false;
+    for (const selector of academicSelectors) {
+      try {
+        if (await page.$(selector)) {
+          log(`Found academic functions using selector: ${selector}`);
+          await page.click(selector, { timeout: 5000 });
+          clicked = true;
+          break;
+        }
+      } catch (err) {
+        log(`Selector ${selector} failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    
+    if (!clicked) {
+      // Fall back to the original approach if none of the selectors worked
+      await clickWithRetry(page, "Click the 'Academic Functions', 'Academics', 'Academic', or 'Menu' link or button in the navigation bar or dashboard", {
+        retries: 5,  // Increased retries
+        timeout: 20000, // Increased timeout
+      });
+    }
+    
+    await page.waitForTimeout(5000); // Increased for dropdown rendering
   } catch (e) {
     log("Could not click academic functions, trying alternative approach");
     const observations = await observeWithRetry(page, "Identify the 'Academic Functions', 'Academics', 'Academic', or 'Menu' link or button in the navigation bar or dashboard", {
@@ -99,4 +129,15 @@ export async function navigateToAssessment(page: Page, context: BrowserContext) 
 
   // Wait for assessment page to load
   await page.waitForTimeout(6000);
+  try {
+    // Add this where navigation elements can't be found
+    const pageContent = await page.evaluate(() => document.body.innerHTML);
+    log(`Page content structure: ${pageContent.substring(0, 500)}...`);
+    const screenshot = await page.screenshot({ fullPage: true });
+    log("Took screenshot of failed navigation");
+    // Save screenshot to file if needed
+  } catch (screenshotError) {
+    log(`Failed to take screenshot: ${screenshotError}`);
+}
+// Add this in the catch block where navigation fails
 }

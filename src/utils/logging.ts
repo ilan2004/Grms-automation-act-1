@@ -1,27 +1,41 @@
 import { Stagehand } from "@browserbasehq/stagehand";
-import boxen from "boxen";
 import chalk from "chalk";
 
-let stagehand: Stagehand | null = null;
+// Store the stagehand instance
+let stagehandInstance: Stagehand;
 
-export function setStagehand(instance: Stagehand) {
-  stagehand = instance;
+// Set the stagehand instance
+export function setStagehand(stagehand: Stagehand): void {
+  stagehandInstance = stagehand;
 }
 
-export function log(message: string) {
-  const logMessage = { category: "grms-automation", message };
-  if (stagehand) {
-    stagehand.log(logMessage);
+// Get the stagehand instance
+export function getStagehand(): Stagehand {
+  if (!stagehandInstance) {
+    throw new Error("Stagehand instance not set. Call setStagehand first.");
   }
-  console.log(`[${logMessage.category}] ${logMessage.message}`);
+  return stagehandInstance;
 }
 
-export function announce(message: string, title?: string) {
-  console.log(
-    boxen(message, {
-      padding: 1,
-      margin: 3,
-      title: title || "Stagehand",
-    }),
-  );
+// Log function
+export function log(message: string): void {
+  console.log(chalk.blue("[GRMS]"), message);
+  if (stagehandInstance) {
+    stagehandInstance.log({
+      category: "grms-automation",
+      message,
+    });
+  }
+}
+
+// Announce function for important messages
+export function announce(message: string, category: string = "GRMS"): void {
+  console.log(chalk.green(`[${category}]`), message);
+  if (stagehandInstance) {
+    stagehandInstance.log({
+      category: "grms-automation",
+      message: `[${category}] ${message}`,
+      level: 0,
+    });
+  }
 }

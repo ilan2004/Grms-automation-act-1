@@ -1,119 +1,178 @@
-import { Page, BrowserContext } from "@browserbasehq/stagehand";
-import { clickWithRetry, typeWithRetry, observeWithRetry } from "../utils/browserUtils";
-import { log } from "../utils/logging";
-import { drawObserveOverlay, clearOverlays } from "../utils/overlay";
-import { answerQuestion } from "./questionHandler";
+import { Stagehand, Page, BrowserContext, ObserveResult } from "@browserbasehq/stagehand";
+import StagehandConfig from "../../stagehand.config.js";
+import chalk from "chalk";
+import boxen from "boxen";
+import { drawObserveOverlay, clearOverlays } from "../utils/overlay.js";
+import { actWithCache } from "../utils/aseessUtils.js";
+import{ answerQuestions} from "./answerQuestions.js";
 
-export async function runAssessment(page: Page, context: BrowserContext, questionCount: number = 10) {
+// Initialize Stagehand with config
+const stagehand = new Stagehand(StagehandConfig);
+const DEBUG = process.env.DEBUG === "true";
+
+export async function manageAssessment(
+  page: Page,
+  context: BrowserContext,
+  questionCount: number = 10,
+  assessmentKey: string = process.env.ASSESSMENT_KEY || "1234"
+): Promise<void> {
+  const logMessage = (msg: string, type: "info" | "error" | "success" = "info") => {
+    const color = type === "error" ? chalk.red : type === "success" ? chalk.green : chalk.cyan;
+    console.log(boxen(color(msg), { padding: 1, margin: 1, borderStyle: "round" }));
+  };
+
+  logMessage(`Starting assessment with ${questionCount} questions`);
+
   // Validate current page
-  const currentUrl = page.url();
-  if (currentUrl.includes("home.htm")) {
-    log(`ERROR: Cannot start assessment from home page: ${currentUrl}`);
-    throw new Error("Not on assessment page");
-  }
+  const currentUrl = await page.url();
+  if (!currentUrl.includes("studentTest.htm")) {
+    logMessage(`Not on test page. Current URL: ${currentUrl}`, "error");
 
-  // Start assessment
-  log("Selecting an uncompleted assessment and clicking Start");
-  try {
-    await clickWithRetry(page, "Click the Start button of an uncompleted online assessment", { retries: 3, timeout: 15000 });
-    await page.waitForTimeout(3000);
-  } catch (e) {
-    const observations = await observeWithRetry(page, "Identify the Start button of an uncompleted online assessment at the top", { retries: 3, timeout: 15000 });
-    if (observations?.length) {
-      await drawObserveOverlay(page, observations);
-      await page.waitForTimeout(1000);
-      await clearOverlays(page);
-      await page.act(observations[0]);
-      await page.waitForTimeout(3000);
-    } else {
-      log(`ERROR: Could not find Start button. Current URL: ${currentUrl}`);
-      throw new Error("Could not find Start button");
+    // Navigate to test page from home page
+    if (currentUrl.includes("home.htm")) {
+      logMessage("Attempting to navigate to test page from home page");
+      try {
+        const observeResult = await actWithCache(page, "navigate_assessment", async () => {
+          const result = await page.observe({ instruction: "Observe the Internal Online Assessment link" });
+          if (!result?.length) throw new Error("Internal Online Assessment link not found");
+          await page.act({ action: "Click on Internal Online Assessment" });
+          await page.waitForNavigation({ timeout: 10000 });
+        });
+        if (DEBUG && observeResult?.length) {
+          await drawObserveOverlay(page, observeResult);
+          await clearOverlays(page);
+        }
+      } catch (e) {
+        logMessage(`Failed to navigate to assessment: ${e instanceof Error ? e.message : String(e)}`, "error");
+        throw new Error("Unable to navigate to assessment page");
+      }
     }
   }
 
-  // Enter assessment key
-  log("Entering assessment key for verification");
-  try {
-    await typeWithRetry(page, "Type '1234' in the Student Online Assessment Key Verification input field", { retries: 3, timeout: 10000 });
-    await page.waitForTimeout(2000);
-  } catch (e) {
-    const observations = await observeWithRetry(page, "Identify the input field for Student Online Assessment Key Verification", { retries: 3, timeout: 10000 });
-    if (observations?.length) {
-      await drawObserveOverlay(page, observations);
-      await page.waitForTimeout(1000);
-      await clearOverlays(page);
-      await page.act(observations[0]);
-      await page.keyboard.type("1234");
-      await page.waitForTimeout(2000);
-    } else {
-      log(`ERROR: Could not find key verification input field. Current URL: ${currentUrl}`);
-      throw new Error("Could not find key verification input field");
-    }
+  // Check if assessment needs to be started
+  let observeResult: ObserveResult[] | null = await page.observe({ instruction: "Observe if a Start button is visible on the page" });
+  if (DEBUG && observeResult?.length) {
+    await drawObserveOverlay(page, observeResult);
+    await clearOverlays(page);
   }
+  const needsStart = observeResult?.length > 0;
+  if (needsStart) {
+    logMessage("Selecting an uncompleted assessment and clicking Start");
+    try {
+      observeResult = await actWithCache(page, "start_assessment", async () => {
+        const result = await page.observe({ instruction: "Observe the Start button" });
+        if (!result?.length) throw new Error("Start button not found");
+        await page.act({ action: "Click the Start button" });
+        await page.waitForNavigation({ timeout: 10000 });
+      });
+      if (DEBUG && observeResult?.length) {
+        await drawObserveOverlay(page, observeResult);
+        await clearOverlays(page);
+      }
 
-  // Click Verify button
-  log("Clicking Verify button");
-  try {
-    await clickWithRetry(page, "Click the Verify button in the Student Online Assessment Key Verification prompt", { retries: 3, timeout: 10000 });
-    await page.waitForTimeout(3000);
-  } catch (e) {
-    const observations = await observeWithRetry(page, "Identify the Verify button in the Student Online Assessment Key Verification prompt", { retries: 3, timeout: 10000 });
-    if (observations?.length) {
-      await drawObserveOverlay(page, observations);
-      await page.waitForTimeout(1000);
-      await clearOverlays(page);
-      await page.act(observations[0]);
-      await page.waitForTimeout(3000);
-    } else {
-      log(`ERROR: Could not find Verify button. Current URL: ${currentUrl}`);
-      throw new Error("Could not find Verify button");
-    }
-  }
+      // Handle key verification if needed
+      observeResult = await page.observe({ instruction: "Observe if there is an input field for an assessment key" });
+      if (DEBUG && observeResult?.length) {
+        await drawObserveOverlay(page, observeResult);
+        await clearOverlays(page);
+      }
+      const hasKeyInput = observeResult?.length > 0;
+      if (hasKeyInput) {
+        logMessage("Entering assessment key");
+        observeResult = await actWithCache(page, "enter_key", async () => {
+          const result = await page.observe({ instruction: "Observe the assessment key input field" });
+          if (!result?.length) throw new Error("Assessment key input not found");
+          await page.act({ action: `Type ${assessmentKey} into the assessment key input field` });
+          await page.waitForTimeout(1000);
+        });
+        if (DEBUG && observeResult?.length) {
+          await drawObserveOverlay(page, observeResult);
+          await clearOverlays(page);
+        }
 
-  // Click Start Assessment button
-  log("Clicking Start Assessment button");
-  try {
-    await clickWithRetry(page, "Click the Start Assessment button", { retries: 3, timeout: 10000 });
-    await page.waitForTimeout(4000);
-  } catch (e) {
-    const observations = await observeWithRetry(page, "Identify the Start Assessment button", { retries: 3, timeout: 10000 });
-    if (observations?.length) {
-      await drawObserveOverlay(page, observations);
-      await page.waitForTimeout(1000);
-      await clearOverlays(page);
-      await page.act(observations[0]);
-      await page.waitForTimeout(4000);
-    } else {
-      log(`ERROR: Could not find Start Assessment button. Current URL: ${currentUrl}`);
-      throw new Error("Could not find Start Assessment button");
+        logMessage("Clicking Verify button");
+        observeResult = await actWithCache(page, "verify_key", async () => {
+          const result = await page.observe({ instruction: "Observe the Verify button" });
+          if (!result?.length) throw new Error("Verify button not found");
+          await page.act({ action: "Click the Verify button" });
+          await page.waitForNavigation({ timeout: 10000 });
+        });
+        if (DEBUG && observeResult?.length) {
+          await drawObserveOverlay(page, observeResult);
+          await clearOverlays(page);
+        }
+      }
+
+      // Check for Start Assessment button
+      observeResult = await page.observe({ instruction: "Observe if a Start Assessment button is visible" });
+      if (DEBUG && observeResult?.length) {
+        await drawObserveOverlay(page, observeResult);
+        await clearOverlays(page);
+      }
+      const hasStartAssessment = observeResult?.length > 0;
+      if (hasStartAssessment) {
+        logMessage("Clicking Start Assessment button");
+        observeResult = await actWithCache(page, "start_assessment_button", async () => {
+          const result = await page.observe({ instruction: "Observe the Start Assessment button" });
+          if (!result?.length) throw new Error("Start Assessment button not found");
+          await page.act({ action: "Click the Start Assessment button" });
+          await page.waitForNavigation({ timeout: 10000 });
+        });
+        if (DEBUG && observeResult?.length) {
+          await drawObserveOverlay(page, observeResult);
+          await clearOverlays(page);
+        }
+      }
+    } catch (e) {
+      logMessage(`Error starting assessment: ${e instanceof Error ? e.message : String(e)}`, "error");
+      throw new Error("Failed to start assessment");
     }
   }
 
   // Answer questions
-  log("Starting to answer questions");
-  for (let i = 1; i <= questionCount; i++) {
-    const success = await answerQuestion(page, i);
-    if (!success) {
-      log(`Failed to answer question ${i}, aborting`);
-      throw new Error(`Failed to answer question ${i}`);
-    }
+  try {
+    await answerQuestions(page, stagehand, questionCount, logMessage);
+  } catch (e) {
+    logMessage(`Error answering questions: ${e instanceof Error ? e.message : String(e)}`, "error");
+    throw new Error("Failed to answer questions");
   }
 
-  // End assessment
-  log("Handling Confirm End Online Assessment prompt");
+  // End assessment (use dynamic option to avoid caching)
+  logMessage("Attempting to end assessment");
   try {
-    await clickWithRetry(page, "Click the Yes button in the Confirm End Online Assessment prompt", { retries: 3, timeout: 10000 });
-    log("Assessment completed successfully");
-  } catch (e) {
-    const observations = await observeWithRetry(page, "Identify the Yes button in the Confirm End Online Assessment prompt", { retries: 3, timeout: 10000 });
-    if (observations?.length) {
-      await drawObserveOverlay(page, observations);
-      await page.waitForTimeout(1000);
+    observeResult = await actWithCache(page, "end_assessment", async () => {
+      const result = await page.observe({ instruction: "Observe the End Test button" });
+      if (!result?.length) throw new Error("End Test button not found");
+      await page.act({ action: "Click the End Test button" });
+      await page.waitForTimeout(2000);
+    }, { dynamic: true });
+    if (DEBUG && observeResult?.length) {
+      await drawObserveOverlay(page, observeResult);
       await clearOverlays(page);
-      await page.act(observations[0]);
-    } else {
-      log(`ERROR: Could not find Yes button in Confirm End Online Assessment prompt. Current URL: ${currentUrl}`);
-      throw new Error("Could not find Yes button in Confirm End Online Assessment prompt");
     }
+
+    // Handle confirmation prompt
+    observeResult = await page.observe({ instruction: "Observe if a confirmation prompt with a Yes or OK button is visible" });
+    if (DEBUG && observeResult?.length) {
+      await drawObserveOverlay(page, observeResult);
+      await clearOverlays(page);
+    }
+    const confirmPrompt = observeResult?.length > 0;
+    if (confirmPrompt) {
+      observeResult = await actWithCache(page, "confirm_end", async () => {
+        const result = await page.observe({ instruction: "Observe the Yes button in the confirmation prompt" });
+        if (!result?.length) throw new Error("Yes button not found");
+        await page.act({ action: "Click the Yes button in the confirmation prompt" });
+      }, { dynamic: true });
+      if (DEBUG && observeResult?.length) {
+        await drawObserveOverlay(page, observeResult);
+        await clearOverlays(page);
+      }
+    }
+
+    logMessage("Assessment completed successfully", "success");
+  } catch (e) {
+    logMessage(`Error ending assessment: ${e instanceof Error ? e.message : String(e)}`, "error");
+    throw new Error("Failed to end assessment");
   }
 }

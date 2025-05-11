@@ -5,8 +5,36 @@ import { drawObserveOverlay, clearOverlays } from "../utils/overlay";
 
 export async function login(page: Page, context: BrowserContext, credentials: { username: string; password: string }) {
   log("Navigating to GRMS login page");
-  await page.goto("https://grms.gardencity.university/login.htm");
-  await page.waitForLoadState("domcontentloaded");
+  
+  // Add retry logic for the initial navigation
+  let retryCount = 0;
+  const maxRetries = 3;
+  let navigationSuccessful = false;
+  
+  while (!navigationSuccessful && retryCount < maxRetries) {
+    try {
+      // Increase timeout to 60 seconds
+      await page.goto("https://grms.gardencity.university/login.htm", { 
+        timeout: 60000,
+        waitUntil: "domcontentloaded" // Less strict than 'load'
+      });
+      navigationSuccessful = true;
+      log(`Successfully loaded login page on attempt ${retryCount + 1}`);
+    } catch (e) {
+      retryCount++;
+      log(`Navigation attempt ${retryCount} failed: ${e instanceof Error ? e.message : String(e)}`);
+      
+      if (retryCount >= maxRetries) {
+        throw new Error(`Failed to navigate to login page after ${maxRetries} attempts: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      
+      // Wait before retrying (exponential backoff)
+      const waitTime = Math.min(2000 * Math.pow(2, retryCount), 15000);
+      log(`Waiting ${waitTime}ms before retry...`);
+      await page.waitForTimeout(waitTime);
+    }
+  }
+  
   log(`Current URL: ${page.url()}`);
   
   // Enter username

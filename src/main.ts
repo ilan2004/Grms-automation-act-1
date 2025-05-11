@@ -3,7 +3,7 @@ import * as dotenv from "dotenv";
 import chalk from "chalk";
 import { login } from "./auth/login";
 import { navigateToAssessment } from "./navigation/assessmentNavigation";
-import { runAssessment } from "./assessment/assessmentController";
+import { manageAssessment } from "./assessment/assessmentController";
 import { config } from "./config/stagehandConfig";
 import { announce, setStagehand } from "./utils/logging";
 
@@ -27,11 +27,10 @@ async function run() {
   const context = stagehand.context;
 
   try {
-    // Wait for initial page load
-    await page.waitForLoadState("domcontentloaded", { timeout: 15000 });
+    await page.waitForLoadState("domcontentloaded", { timeout: 30000 });
     await login(page, context, { username: "22BTAI153@gcu.edu.in", password: "Iluusman1234" });
     await navigateToAssessment(page, context);
-    await runAssessment(page, context, 10);
+    await manageAssessment(page, context, 10);
   } catch (e) {
     console.error(`Automation failed: ${e instanceof Error ? e.message : String(e)}`);
     throw e; // Ensure script stops on failure
