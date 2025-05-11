@@ -24,7 +24,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 // Serve index.html for root route
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
+  res.sendFile(path.join(__dirname, '../index.html'));
 });
 
 // API endpoint for starting automation
