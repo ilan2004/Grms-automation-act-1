@@ -3,7 +3,6 @@ FROM node:20
 # Install Playwright system dependencies using playwright's script
 RUN apt-get update && apt-get install -y \
     curl \
-    && npm install -g npx \
     && npx playwright install-deps \
     && apt-get clean
 
