@@ -14,7 +14,11 @@ RUN apt-get update && apt-get install -y \
     libpango-1.0-0 \
     libcairo2 \
     libasound2 \
+    libcups2 \
     && apt-get clean
+
+# Install Playwright dependencies using playwright's own script
+RUN npm install -g npx && npx playwright install-deps
 
 # Set working directory
 WORKDIR /app
