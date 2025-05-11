@@ -16,6 +16,7 @@ const StagehandConfig: ConstructorParams = {
   // Browser configuration
   env: "LOCAL", // Run locally, no Browserbase
   localBrowserLaunchOptions: {
+    headless: true, // Run in headless mode
     viewport: {
       width: 1024,
       height: 768,
