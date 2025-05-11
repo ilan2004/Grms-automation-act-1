@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GRMS Automation</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+  <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
+    <h1 class="text-2xl font-bold text-center text-gray-800 mb-6">GRMS Automation</h1>
+    <div id="form-container">
+      <div class="mb-4">
+        <label for="username" class="block text-sm font-medium text-gray-700">Username</label>
+        <input
+          type="text"
+          id="username"
+          placeholder="Enter your username"
+          class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+          required
+        >
+      </div>
+      <div class="mb-4">
+        <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+        <input
+          type="password"
+          id="password"
+          placeholder="Enter your password"
+          class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+          required
+        >
+      </div>
+      <div class="mb-6">
+        <label for="api-key" class="block text-sm font-medium text-gray-700">Google Generative AI API Key</label>
+        <input
+          type="text"
+          id="api-key"
+          placeholder="Enter your API key"
+          class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+          required
+        >
+      </div>
+      <button
+        id="start-automation"
+        class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+      >
+        Start Automation
+      </button>
+    </div>
+    <div id="status" class="mt-4 text-sm text-gray-600"></div>
+  </div>
+
+  <script>
+    document.getElementById('start-automation').addEventListener('click', async () => {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const apiKey = document.getElementById('api-key').value;
+      const statusDiv = document.getElementById('status');
+
+      if (!username || !password || !apiKey) {
+        statusDiv.innerHTML = '<span class="text-red-500">Please fill in all fields.</span>';
+        return;
+      }
+
+      statusDiv.innerHTML = 'Initiating automation...';
+      document.getElementById('start-automation').disabled = true;
+      document.getElementById('start-automation').classList.add('opacity-50', 'cursor-not-allowed');
+
+      try {
+        const response = await fetch('/api/start-automation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password, apiKey }),
+        });
+        const result = await response.json();
+
+        if (result.status === 'success') {
+          statusDiv.innerHTML = '<span class="text-green-500">Automation started successfully!</span>';
+        } else {
+          statusDiv.innerHTML = `<span class="text-red-500">Error: ${result.message}</span>`;
+        }
+      } catch (error) {
+        statusDiv.innerHTML = `<span class="text-red-500">Error: ${error.message || 'Automation failed'}</span>`;
+      } finally {
+        document.getElementById('start-automation').disabled = false;
+        document.getElementById('start-automation').classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+    });
+  </script>
+</body>
+</html>

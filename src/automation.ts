@@ -1,16 +1,13 @@
 import { Stagehand, Page, BrowserContext } from "@browserbasehq/stagehand";
-import StagehandConfig from "./stagehand.config.js";
-import chalk from "chalk";
-import boxen from "boxen";
-import { drawObserveOverlay, clearOverlays} from "./utils.js";
-import { GoogleGenerativeAI, GenerativeModel } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { z } from 'zod';
+import { drawObserveOverlay, clearOverlays } from "../utils.js";
 
-// Initialize Google Generative AI with API key
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || "AIzaSyBtl8q8OPzQwhO0V55xw21mcKzVbEhot1Q");
+// Initialize Google Generative AI
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || "");
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-// Define Zod schema for quiz content extraction
+// Zod schema for quiz content
 const quizSchema = z.object({
   questionText: z.string(),
   options: z.array(z.object({
@@ -18,14 +15,14 @@ const quizSchema = z.object({
   })),
 });
 
-// Define interface for AI answer response
+// Interface for AI answer response
 interface AIAnswerResponse {
   answer: string;
   isMultipleSelect?: boolean;
   multipleAnswers?: string[];
 }
 
-// Function to find the closest matching option using fuzzy matching
+// Fuzzy matching for options
 function findClosestOption(answer: string, options: string[]): string | null {
   const normalizedAnswer = answer.toLowerCase().trim();
   let bestMatch: string | null = null;
@@ -47,19 +44,16 @@ function findClosestOption(answer: string, options: string[]): string | null {
   return bestMatch;
 }
 
-// Function to get the correct answer using Google Generative AI
-async function getAIAnswer(questionText: string, options: string[]): Promise<AIAnswerResponse> {
+// Get AI answer using Google Generative AI
+async function getAIAnswer(stagehand: Stagehand, questionText: string, options: string[]): Promise<AIAnswerResponse> {
   try {
     const prompt = `
-            You are an expert assistant. Given the following question and options, identify the correct answer(s).
-      
-      IMPORTANT: First determine if this is a single-select question (only one correct answer) or a multiple-select question (multiple correct answers).
-      
-      If it's a single-select question, return ONLY the exact text of the correct option.
-      If it's a multiple-select question, start your answer with "MULTIPLE:" followed by each correct option on a new line.
+      You are an expert assistant. Given the following question and options, identify the correct answer(s).
+      IMPORTANT: Determine if this is a single-select (one correct answer) or multiple-select (multiple correct answers) question.
+      For single-select, return ONLY the exact text of the correct option.
+      For multiple-select, start with "MULTIPLE:" followed by each correct option on a new line.
 
       Question: ${questionText}
-
       Options:
       ${options.map((opt, index) => `${index + 1}. ${opt}`).join("\n")}
 
@@ -80,7 +74,6 @@ async function getAIAnswer(questionText: string, options: string[]): Promise<AIA
       message: `AI returned answer: ${answer}`,
     });
 
-    // Check if this is a multiple-select response
     if (answer.startsWith("MULTIPLE:")) {
       const multipleAnswers = answer
         .replace("MULTIPLE:", "")
@@ -94,7 +87,7 @@ async function getAIAnswer(questionText: string, options: string[]): Promise<AIA
       });
       
       return { 
-        answer: multipleAnswers[0] || "",  // Use first answer as primary for compatibility
+        answer: multipleAnswers[0] || "", 
         isMultipleSelect: true, 
         multipleAnswers 
       };
@@ -111,8 +104,6 @@ async function getAIAnswer(questionText: string, options: string[]): Promise<AIA
         });
         return { answer: matchedOption };
       }
-      // If no match is found, return the original answer
-      // This might cause issues downstream, but it's better than throwing an error
       stagehand.log({
         category: "grms-automation",
         message: `Warning: Could not match AI answer '${answer}' to any option`,
@@ -128,20 +119,19 @@ async function getAIAnswer(questionText: string, options: string[]): Promise<AIA
   }
 }
 
-// Declare stagehand as a global variable
-let stagehand: Stagehand;
-
-async function main({
+export async function main({
   page,
   context,
-  stagehand: stagehandInstance,
+  stagehand,
+  username,
+  password,
 }: {
   page: Page;
   context: BrowserContext;
   stagehand: Stagehand;
+  username: string;
+  password: string;
 }) {
-  stagehand = stagehandInstance;
-  
   // Navigate to GRMS login page
   stagehand.log({ category: "grms-automation", message: "Navigating to GRMS login page" });
   await page.goto("https://grms.gardencity.university/login.htm");
@@ -167,7 +157,7 @@ async function main({
   }
 
   try {
-    await page.act("Type '22BTDS102@gcu.edu.in' in the username field");
+    await page.act(`Type '${username}' in the username field`);
   } catch (e) {
     stagehand.log({ category: "grms-automation", message: "Error typing username, trying alternative" });
     const usernameObservations = await page.observe("Identify the username or email input field");
@@ -177,7 +167,7 @@ async function main({
       await clearOverlays(page);
       await page.act(usernameObservations[0]);
       await page.waitForTimeout(300);
-      await page.keyboard.type("22BTDS102@gcu.edu.in", { delay: 50 });
+      await page.keyboard.type(username, { delay: 50 });
     } else {
       stagehand.log({ category: "grms-automation", message: "ERROR: Could not find username field" });
       throw new Error("Could not find username field");
@@ -186,7 +176,7 @@ async function main({
 
   await page.waitForTimeout(500);
 
-  // Enter password
+  // Enter.Monad
   stagehand.log({ category: "grms-automation", message: "Entering password" });
   try {
     await page.act("Click on the password field");
@@ -202,7 +192,7 @@ async function main({
   }
 
   try {
-    await page.act("Type 'expassword' in the password field");
+    await page.act(`Type '${password}' in the password field`);
   } catch (e) {
     stagehand.log({ category: "grms-automation", message: "Error typing password, trying alternative" });
     const passwordObservations = await page.observe("Identify the password input field");
@@ -212,7 +202,7 @@ async function main({
       await clearOverlays(page);
       await page.act(passwordObservations[0]);
       await page.waitForTimeout(300);
-      await page.keyboard.type("expassword", { delay: 50 });
+      await page.keyboard.type(password, { delay: 50 });
     } else {
       stagehand.log({ category: "grms-automation", message: "ERROR: Could not find password field" });
       throw new Error("Could not find password field");
@@ -246,7 +236,7 @@ async function main({
   if (currentUrlAfterLogin !== "https://grms.gardencity.university/login.htm") {
     stagehand.log({ category: "grms-automation", message: "Login successful! Redirected to: " + currentUrlAfterLogin });
 
-    // Check if already on assessment list page
+    // Check if on assessment list page
     const isOnAssessmentPage = await page.evaluate(() => {
       const startButtons = Array.from(document.querySelectorAll('button, input[type="button"]'))
         .filter(el => el.textContent?.includes('Start') || (el as HTMLInputElement).value?.includes('Start'));
@@ -302,9 +292,9 @@ async function main({
       await page.waitForTimeout(3000);
     }
     
-    // Loop until no more assessments are available
+    // Loop until no more assessments
     while (true) {
-      // Check if there are any Start buttons
+      // Check for Start buttons
       const hasAssessments = await page.evaluate(() => {
         const startButtons = Array.from(document.querySelectorAll('button, input[type="button"]'))
           .filter(el => el.textContent?.includes('Start') || (el as HTMLInputElement).value?.includes('Start'));
@@ -316,7 +306,7 @@ async function main({
         break;
       }
       
-      // Select uncompleted assessment and start
+      // Start uncompleted assessment
       stagehand.log({ category: "grms-automation", message: "Selecting an uncompleted assessment and clicking Start" });
       try {
         await page.act("Click the Start button of an uncompleted online assessment");
@@ -336,6 +326,7 @@ async function main({
         }
       }
       
+      // Enter assessment key
       stagehand.log({ category: "grms-automation", message: "Entering assessment key for verification" });
       try {
         await page.act("Type '1234' in the Student Online Assessment Key Verification input field");
@@ -402,14 +393,13 @@ async function main({
         stagehand.log({ category: "grms-automation", message: `Processing question ${i}` });
 
         try {
-          // First try quick extraction
+          // Extract question and options
           let extractResult = await page.extract({
             instruction: "Extract the current quiz question and all answer options",
             schema: quizSchema,
           });
 
           if (!extractResult || !extractResult.questionText || !extractResult.options || extractResult.options.length === 0) {
-            // If quick extraction fails, try more detailed extraction
             const detailedExtract = await page.extract({
               instruction: "Look for a quiz question (usually starts with 'Question X of Y') and multiple choice options (usually labeled as Option 1, Option 2, etc). Extract the question text and all available options.",
               schema: quizSchema,
@@ -433,9 +423,9 @@ async function main({
 
           stagehand.log({ category: "grms-automation", message: `Extracted question: ${questionText.substring(0, 50)}... with ${options.length} options` });
 
-          // Get AI answer while simultaneously preparing for selection
+          // Get AI answer
           const [aiResponse] = await Promise.all([
-            getAIAnswer(questionText, options),
+            getAIAnswer(stagehand, questionText, options),
             page.waitForTimeout(500)
           ]);
           
@@ -446,7 +436,6 @@ async function main({
               message: `Processing multiple-select question with ${aiResponse.multipleAnswers.length} answers` 
             });
             
-            // Find and select each option
             for (const answerText of aiResponse.multipleAnswers) {
               const optionIndex = options.findIndex(opt => 
                 opt === answerText || 
@@ -461,12 +450,11 @@ async function main({
                   message: `Selecting multiple-select option: '${selectedOption}'` 
                 });
                 
-                // Attempt to select each option
                 for (let attempt = 1; attempt <= 2; attempt++) {
                   try {
                     await page.act(`Select the option '${selectedOption}' for the current question`);
                     await page.waitForTimeout(300);
-                    break; // Exit loop if selection is successful
+                    break;
                   } catch (actError) {
                     stagehand.log({ 
                       category: "grms-automation", 
@@ -475,7 +463,7 @@ async function main({
                     if (attempt === 2) {
                       stagehand.log({ 
                         category: "grms-automation", 
-                        message: `Warning: Failed to select option '${selectedOption}' after ${attempt} attempts, continuing with other options` 
+                        message: `Warning: Failed to select option '${selectedOption}' after ${attempt} attempts` 
                       });
                     }
                   }
@@ -488,19 +476,18 @@ async function main({
               }
             }
           } else {
-            // Single-select question handling
+            // Single-select question
             const answer = aiResponse.answer;
             const optionIndex = options.findIndex(opt => opt === answer || opt.includes(answer) || answer.includes(opt));
             
             if (optionIndex >= 0) {
               const selectedOption = fullOptions[optionIndex];
               
-              // Attempt to select the option
               for (let attempt = 1; attempt <= 2; attempt++) {
                 try {
                   await page.act(`Select the option '${selectedOption}' for the current question`);
                   await page.waitForTimeout(300);
-                  break; // Exit loop if selection is successful
+                  break;
                 } catch (actError) {
                   stagehand.log({ 
                     category: "grms-automation", 
@@ -511,13 +498,11 @@ async function main({
                       category: "grms-automation", 
                       message: `Warning: Failed to select option after ${attempt} attempts` 
                     });
-                    // Instead of throwing error, we'll try a different approach
                     try {
-                      // Try selecting by index instead
                       await page.act(`Select option ${optionIndex + 1} for the current question`);
                       await page.waitForTimeout(300);
                     } catch (indexError) {
-                      throw new Error(`Failed to select option by any method: ${indexError instanceof Error ? indexError.message : String(indexError)}`);
+                      throw new Error(`Failed to select option: ${indexError instanceof Error ? indexError.message : String(indexError)}`);
                     }
                   }
                 }
@@ -525,10 +510,9 @@ async function main({
             } else {
               stagehand.log({ 
                 category: "grms-automation", 
-                message: `Warning: Could not map AI answer '${answer}' to any option, will try first option` 
+                message: `Warning: Could not map AI answer '${answer}' to any option, trying first option` 
               });
               
-              // If we can't map the answer, try the first option as a fallback
               try {
                 await page.act(`Select the first option for the current question`);
                 await page.waitForTimeout(300);
@@ -541,7 +525,7 @@ async function main({
             }
           }
 
-          // Click Save and Next button
+          // Click Save and Next
           try {
             await page.act("Click the Save and Next button");
             await page.waitForTimeout(1000);
@@ -591,7 +575,7 @@ async function main({
         }
       }
       
-      // Handle "Assessment completed successfully" message
+      // Handle completion message
       try {
         await page.act("Click the OK button in the Assessment completed successfully message");
         await page.waitForTimeout(1000);
@@ -610,7 +594,7 @@ async function main({
         }
       }
       
-      // Click Back button to return to assessment list
+      // Return to assessment list
       try {
         await page.act("Click the Back button");
         await page.waitForTimeout(1500);
@@ -629,7 +613,7 @@ async function main({
         }
       }
       
-      // Quick check for more assessments
+      // Check for more assessments
       const hasMoreAssessments = await page.evaluate(() => {
         return Array.from(document.querySelectorAll('button, input[type="button"]'))
           .some(el => el.textContent?.includes('Start') || (el as HTMLInputElement).value?.includes('Start'));
@@ -642,40 +626,3 @@ async function main({
     throw new Error("Login failed");
   }
 }
-
-async function run() {
-  stagehand = new Stagehand({ ...StagehandConfig });
-  await stagehand.init();
-
-  if (StagehandConfig.env === "BROWSERBASE" && stagehand.browserbaseSessionID) {
-    console.log(
-      boxen(
-        `View this session live in your browser: \n${chalk.blue(
-          `https://browserbase.com/sessions/${stagehand.browserbaseSessionID}`
-        )}`,
-        { title: "Browserbase", padding: 1, margin: 3 }
-      )
-    );
-  }
-
-  const page = stagehand.page;
-  const context = stagehand.context;
-  try {
-    await main({ page, context, stagehand });
-  } catch (error) {
-    stagehand.log({
-      category: "grms-automation",
-      message: `Automation failed: ${error instanceof Error ? error.message : String(error)}`,
-    });
-    throw error;
-  } finally {
-    await stagehand.close();
-    console.log(
-      `\n🤘 GRMS login automation completed! Reach out on Slack if you have any feedback: ${chalk.blue(
-        "https://stagehand.dev/slack"
-      )}\n`
-    );
-  }
-}
-
-run();
