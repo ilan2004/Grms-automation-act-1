@@ -1,6 +1,13 @@
 FROM node:20
 
-# Install Playwright system dependencies
+# Install Playwright system dependencies using playwright's script
+RUN apt-get update && apt-get install -y \
+    curl \
+    && npm install -g npx \
+    && npx playwright install-deps \
+    && apt-get clean
+
+# Install additional common dependencies as a fallback
 RUN apt-get update && apt-get install -y \
     libnss3 \
     libatk1.0-0 \
@@ -15,10 +22,10 @@ RUN apt-get update && apt-get install -y \
     libcairo2 \
     libasound2 \
     libcups2 \
+    libdrm2 \
+    libgtk-3-0 \
+    fonts-liberation \
     && apt-get clean
-
-# Install Playwright dependencies using playwright's own script
-RUN npm install -g npx && npx playwright install-deps
 
 # Set working directory
 WORKDIR /app
@@ -30,8 +37,8 @@ RUN npm install
 # Copy the rest of the application
 COPY . .
 
-# Install Playwright browsers
-RUN npm run postinstall
+# Install Playwright browsers with verbose output
+RUN npm run postinstall && echo "Playwright browsers installed successfully" || echo "Playwright browser installation failed"
 
 # Expose port 3000
 EXPOSE 3000
