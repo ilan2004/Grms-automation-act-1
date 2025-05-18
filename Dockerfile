@@ -40,7 +40,7 @@ COPY . .
 RUN npm run postinstall && echo "Playwright browsers installed successfully" || echo "Playwright browser installation failed"
 
 # Expose port 3000
-EXPOSE 3000
+EXPOSE 3131
 
 # Start the application
 CMD ["npm", "start"]

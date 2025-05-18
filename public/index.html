@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' https://unpkg.com; connect-src 'self' http://localhost:3132">
+  <title>GRMS Automation</title>
+  <link href="./css/tailwind.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@0.441.0/dist/umd/lucide.min.js"></script>
+  <style>
+    .status-toast {
+      animation: toastAnimation 4s ease-in-out forwards;
+    }
+    @keyframes toastAnimation {
+      0% { opacity: 0; transform: translateY(-20px); }
+      10% { opacity: 1; transform: translateY(0); }
+      90% { opacity: 1; transform: translateY(0); }
+      100% { opacity: 0; transform: translateY(-20px); }
+    }
+  </style>
+</head>
+<body class="bg-black min-h-screen flex flex-col dark text-gray-200 animated-bg">
+  <!-- Custom Title Bar -->
+  <div class="bg-black/80 backdrop-blur-md flex justify-between items-center px-4 py-2 select-none" data-tauri-drag-region>
+    <div class="flex items-center space-x-2">
+      <i data-lucide="bot" class="w-5 h-5 text-lime-600"></i>
+      <span class="text-sm font-semibold text-gray-400">GRMS Automation</span>
+    </div>
+    <div class="flex space-x-1">
+      <button id="minimizeBtn" class="btn btn-ghost btn-xs text-gray-400 hover:text-gray-100 hover:bg-black/50 rounded-full">
+        <i data-lucide="minus" class="w-4 h-4"></i>
+      </button>
+      <button id="maximizeBtn" class="btn btn-ghost btn-xs text-gray-400 hover:text-gray-100 hover:bg-black/50 rounded-full">
+        <i data-lucide="square" class="w-4 h-4"></i>
+      </button>
+      <button id="closeBtn" class="btn btn-ghost btn-xs text-gray-400 hover:text-gray-100 hover:bg-red-600/50 rounded-full">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="flex-grow flex items-center justify-center p-6">
+    <div class="card bg-black/80 backdrop-blur-lg shadow-xl w-full max-w-md p-8 border border-lime-600/30 rounded-2xl glass-effect">
+      <div class="text-center mb-6">
+        <h1 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-lime-600 to-lime-400">GRMS Automation</h1>
+      </div>
+
+      <form id="automationForm" class="space-y-6">
+        <div class="form-control">
+          <label class="label" for="username">
+            <span class="label-text text-gray-400">GRMS Username</span>
+          </label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3">
+              <i data-lucide="user" class="w-5 h-5 text-lime-600"></i>
+            </span>
+            <input
+              type="text"
+              id="username"
+              name="username"
+              placeholder="e.g., 22BTDS102@gcu.edu.in"
+              required
+              class="input input-bordered w-full pl-10 bg-black border-gray-800 text-gray-200 focus:ring-2 focus:ring-lime-600 transition-all duration-300"
+            />
+          </div>
+        </div>
+
+        <div class="form-control">
+          <label class="label" for="password">
+            <span class="label-text text-gray-400">GRMS Password</span>
+          </label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3">
+              <i data-lucide="lock" class="w-5 h-5 text-lime-600"></i>
+            </span>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              required
+              class="input input-bordered w-full pl-10 bg-black border-gray-800 text-gray-200 focus:ring-2 focus:ring-lime-600 transition-all duration-300"
+            />
+          </div>
+        </div>
+
+        <div class="form-control">
+          <label class="label" for="apiKey">
+            <span class="label-text text-gray-400">Google Generative AI API Key</span>
+          </label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3">
+              <i data-lucide="key" class="w-5 h-5 text-lime-600"></i>
+            </span>
+            <input
+              type="text"
+              id="apiKey"
+              name="apiKey"
+              required
+              class="input input-bordered w-full pl-10 bg-black border-gray-800 text-gray-200 focus:ring-2 focus:ring-lime-600 transition-all duration-300"
+            />
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          id="startButton"
+          class="btn btn-primary w-full mt-4 bg-lime-600 hover:bg-lime-700 text-white font-medium transition-all duration-300 transform hover:-translate-y-1"
+        >
+          Start Automation
+        </button>
+      </form>
+
+      <div id="status" class="mt-4"></div>
+
+      <div class="mt-6 pt-4 border-t border-gray-800 text-center">
+        <p class="text-xs text-gray-400">
+          Secure connection • Data encrypted • No information stored
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      try {
+        lucide.createIcons();
+        console.log('Lucide icons initialized');
+      } catch (err) {
+        console.error('Failed to initialize Lucide icons:', err);
+      }
+    });
+
+    const { ipcRenderer } = require('electron');
+    const form = document.getElementById('automationForm');
+    const startButton = document.getElementById('startButton');
+    const status = document.getElementById('status');
+
+    // Title bar controls
+    document.getElementById('minimizeBtn').addEventListener('click', () => {
+      console.log('Minimize button clicked');
+      ipcRenderer.send('minimize-window');
+    });
+    document.getElementById('maximizeBtn').addEventListener('click', () => {
+      console.log('Maximize button clicked');
+      ipcRenderer.send('maximize-window');
+    });
+    document.getElementById('closeBtn').addEventListener('click', () => {
+      console.log('Close button clicked');
+      ipcRenderer.send('close-window');
+    });
+
+    // Status message display with CSS animation
+    function showStatus(message, type) {
+      const statusClasses = {
+        success: 'alert alert-success',
+        error: 'alert alert-error',
+        info: 'alert alert-info'
+      };
+      status.innerHTML = `
+        <div class="${statusClasses[type]} status-toast" role="alert">
+          <span>${message}</span>
+        </div>
+      `;
+      setTimeout(() => { status.innerHTML = ''; }, 4000);
+    }
+
+    function setLoading(isLoading) {
+      if (isLoading) {
+        startButton.disabled = true;
+        startButton.innerHTML = `
+          <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          Processing...
+        `;
+        showStatus('Initiating automation...', 'info');
+      } else {
+        startButton.disabled = false;
+        startButton.innerHTML = 'Start Automation';
+      }
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      console.log('Form submitted');
+
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const apiKey = document.getElementById('apiKey').value;
+
+      setLoading(true);
+
+      try {
+        console.log('Sending POST to http://localhost:3132/api/start-automation');
+        const response = await fetch('http://localhost:3132/api/start-automation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password, apiKey }),
+        });
+
+        const result = await response.json();
+        console.log('Response received:', result);
+
+        if (result.status === 'success') {
+          showStatus('Automation started successfully! Watch the browser.', 'success');
+        } else {
+          throw new Error(result.message || 'Automation failed');
+        }
+      } catch (error) {
+        console.error('Automation error:', error);
+        showStatus(`Error: ${error.message}`, 'error');
+      } finally {
+        setLoading(false);
+      }
+    });
+  </script>
+</body>
+</html>

@@ -5,7 +5,12 @@ import { drawObserveOverlay, clearOverlays } from "../utils.js";
 
 // Initialize Google Generative AI
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+// Rate limiting variables
+const REQUESTS_PER_MINUTE = 15;
+const MINUTE_IN_MS = 60 * 1000;
+let requestTimestamps: number[] = [];
 
 // Zod schema for quiz content
 const quizSchema = z.object({
@@ -44,79 +49,123 @@ function findClosestOption(answer: string, options: string[]): string | null {
   return bestMatch;
 }
 
-// Get AI answer using Google Generative AI
+// Rate limiting function
+async function rateLimit(): Promise<void> {
+  const now = Date.now();
+  requestTimestamps = requestTimestamps.filter(ts => now - ts < MINUTE_IN_MS);
+  
+  if (requestTimestamps.length >= REQUESTS_PER_MINUTE) {
+    const oldestRequest = requestTimestamps[0];
+    const waitTime = MINUTE_IN_MS - (now - oldestRequest) + 100; // +100ms buffer
+    console.log(`Rate limit reached. Waiting ${waitTime}ms...`);
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+    requestTimestamps = [];
+  }
+  
+  requestTimestamps.push(now);
+}
+
+// Get AI answer with retry logic
 async function getAIAnswer(stagehand: Stagehand, questionText: string, options: string[]): Promise<AIAnswerResponse> {
-  try {
-    const prompt = `
-      You are an expert assistant. Given the following question and options, identify the correct answer(s).
-      IMPORTANT: Determine if this is a single-select (one correct answer) or multiple-select (multiple correct answers) question.
-      For single-select, return ONLY the exact text of the correct option.
-      For multiple-select, start with "MULTIPLE:" followed by each correct option on a new line.
+  const maxRetries = 3;
+  let retryCount = 0;
 
-      Question: ${questionText}
-      Options:
-      ${options.map((opt, index) => `${index + 1}. ${opt}`).join("\n")}
+  while (retryCount <= maxRetries) {
+    try {
+      await rateLimit();
 
-      Correct Answer:
-    `;
+      const prompt = `
+        You are an expert assistant. Given the following question and options, identify the correct answer(s).
+        IMPORTANT: Determine if this is a single-select (one correct answer) or multiple-select (multiple correct answers) question.
+        For single-select, return ONLY the exact text of the correct option.
+        For multiple-select, start with "MULTIPLE:" followed by each correct option on a new line.
 
-    stagehand.log({
-      category: "grms-automation",
-      message: `Querying Google Generative AI for question: ${questionText.substring(0, 50)}...`,
-    });
+        Question: ${questionText}
+        Options:
+        ${options.map((opt, index) => `${index + 1}. ${opt}`).join("\n")}
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    let answer = response.text().trim();
+        Correct Answer:
+      `;
 
-    stagehand.log({
-      category: "grms-automation",
-      message: `AI returned answer: ${answer}`,
-    });
-
-    if (answer.startsWith("MULTIPLE:")) {
-      const multipleAnswers = answer
-        .replace("MULTIPLE:", "")
-        .split("\n")
-        .map(line => line.trim())
-        .filter(line => line.length > 0);
-      
       stagehand.log({
         category: "grms-automation",
-        message: `Detected multiple-select question with ${multipleAnswers.length} answers`,
+        message: `Querying Google Generative AI for question: ${questionText.substring(0, 50)}... (Attempt ${retryCount + 1}/${maxRetries + 1})`,
       });
-      
-      return { 
-        answer: multipleAnswers[0] || "", 
-        isMultipleSelect: true, 
-        multipleAnswers 
-      };
-    }
 
-    if (options.includes(answer)) {
-      return { answer };
-    } else {
-      const matchedOption = findClosestOption(answer, options);
-      if (matchedOption) {
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      let answer = response.text().trim();
+
+      stagehand.log({
+        category: "grms-automation",
+        message: `AI returned answer: ${answer}`,
+      });
+
+      if (answer.startsWith("MULTIPLE:")) {
+        const multipleAnswers = answer
+          .replace("MULTIPLE:", "")
+          .split("\n")
+          .map(line => line.trim())
+          .filter(line => line.length > 0);
+        
         stagehand.log({
           category: "grms-automation",
-          message: `Mapped AI answer '${answer}' to option '${matchedOption}'`,
+          message: `Detected multiple-select question with ${multipleAnswers.length} answers`,
         });
-        return { answer: matchedOption };
+        
+        return { 
+          answer: multipleAnswers[0] || "", 
+          isMultipleSelect: true, 
+          multipleAnswers 
+        };
       }
+
+      if (options.includes(answer)) {
+        return { answer };
+      } else {
+        const matchedOption = findClosestOption(answer, options);
+        if (matchedOption) {
+          stagehand.log({
+            category: "grms-automation",
+            message: `Mapped AI answer '${answer}' to option '${matchedOption}'`,
+          });
+          return { answer: matchedOption };
+        }
+        stagehand.log({
+          category: "grms-automation",
+          message: `Warning: Could not match AI answer '${answer}' to any option`,
+        });
+        return { answer };
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       stagehand.log({
         category: "grms-automation",
-        message: `Warning: Could not match AI answer '${answer}' to any option`,
+        message: `Error querying AI: ${errorMessage}`,
       });
-      return { answer };
+
+      if (errorMessage.includes("429 Too Many Requests")) {
+        retryCount++;
+        const retryDelay = errorMessage.includes("retryDelay") 
+          ? parseInt(errorMessage.match(/retryDelay":"(\d+)s"/)?.[1] || "55") * 1000
+          : 55000;
+        stagehand.log({
+          category: "grms-automation",
+          message: `Quota exceeded. Retrying in ${retryDelay}ms... (Attempt ${retryCount}/${maxRetries})`,
+        });
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+        continue;
+      }
+
+      throw error;
     }
-  } catch (error) {
-    stagehand.log({
-      category: "grms-automation",
-      message: `Error querying AI: ${error instanceof Error ? error.message : String(error)}`,
-    });
-    throw error;
   }
+
+  stagehand.log({
+    category: "grms-automation",
+    message: `Failed to query AI after ${maxRetries} retries`,
+  });
+  throw new Error("Exceeded retry limit for AI query");
 }
 
 export async function main({
@@ -176,7 +225,7 @@ export async function main({
 
   await page.waitForTimeout(500);
 
-  // Enter.Monad
+  // Enter password
   stagehand.log({ category: "grms-automation", message: "Entering password" });
   try {
     await page.act("Click on the password field");
@@ -440,32 +489,70 @@ export async function main({
               const optionIndex = options.findIndex(opt => 
                 opt === answerText || 
                 opt.includes(answerText) || 
-                answerText.includes(opt)
+                answerText.includes(opt) || 
+                findClosestOption(answerText, options) === opt
               );
               
               if (optionIndex >= 0) {
                 const selectedOption = fullOptions[optionIndex];
                 stagehand.log({ 
                   category: "grms-automation", 
-                  message: `Selecting multiple-select option: '${selectedOption}'` 
+                  message: `Attempting to select multiple-select option: '${selectedOption}'` 
                 });
                 
-                for (let attempt = 1; attempt <= 2; attempt++) {
+                for (let attempt = 1; attempt <= 3; attempt++) {
                   try {
-                    await page.act(`Select the option '${selectedOption}' for the current question`);
-                    await page.waitForTimeout(300);
-                    break;
+                    // Try direct checkbox click
+                    const checkboxSelector = await page.evaluate((opt) => {
+                      const checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"]'));
+                      const label = checkboxes.find(cb => {
+                        const parent = cb.closest('label') || cb.nextElementSibling;
+                        return parent?.textContent?.includes(opt);
+                      });
+                      return label ? `[id="${label.getAttribute('id')}"]` : null;
+                    }, selectedOption);
+                    
+                    if (checkboxSelector) {
+                      await page.click(checkboxSelector);
+                      stagehand.log({ 
+                        category: "grms-automation", 
+                        message: `Clicked checkbox for option: '${selectedOption}'` 
+                      });
+                    } else {
+                      await page.act(`Select the option '${selectedOption}' for the current question`);
+                    }
+                    
+                    // Verify selection
+                    const isSelected = await page.evaluate((opt) => {
+                      const checkboxes = Array.from(document.querySelectorAll('input[type="checkbox"]'));
+                      const checkbox = checkboxes.find(cb => {
+                        const parent = cb.closest('label') || cb.nextElementSibling;
+                        return parent?.textContent?.includes(opt);
+                      });
+                      return (checkbox as HTMLInputElement)?.checked;
+                    }, selectedOption);
+                    
+                    if (isSelected) {
+                      stagehand.log({ 
+                        category: "grms-automation", 
+                        message: `Verified selection of option: '${selectedOption}'` 
+                      });
+                      break;
+                    } else {
+                      throw new Error(`Option '${selectedOption}' not selected`);
+                    }
                   } catch (actError) {
                     stagehand.log({ 
                       category: "grms-automation", 
                       message: `Error during selection attempt ${attempt}: ${actError instanceof Error ? actError.message : String(actError)}` 
                     });
-                    if (attempt === 2) {
+                    if (attempt === 3) {
                       stagehand.log({ 
                         category: "grms-automation", 
                         message: `Warning: Failed to select option '${selectedOption}' after ${attempt} attempts` 
                       });
                     }
+                    await page.waitForTimeout(500);
                   }
                 }
               } else {
@@ -483,7 +570,7 @@ export async function main({
             if (optionIndex >= 0) {
               const selectedOption = fullOptions[optionIndex];
               
-              for (let attempt = 1; attempt <= 2; attempt++) {
+              for (let attempt = 1; attempt <= 3; attempt++) {
                 try {
                   await page.act(`Select the option '${selectedOption}' for the current question`);
                   await page.waitForTimeout(300);
@@ -493,7 +580,7 @@ export async function main({
                     category: "grms-automation", 
                     message: `Error during selection attempt ${attempt}: ${actError instanceof Error ? actError.message : String(actError)}` 
                   });
-                  if (attempt === 2) {
+                  if (attempt === 3) {
                     stagehand.log({ 
                       category: "grms-automation", 
                       message: `Warning: Failed to select option after ${attempt} attempts` 

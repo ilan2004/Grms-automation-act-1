@@ -1,0 +1,2 @@
+This file ensures the logs directory is included in the installer package.
+Log files will be written to this directory when the application runs.

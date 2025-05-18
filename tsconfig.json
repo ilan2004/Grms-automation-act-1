@@ -9,9 +9,15 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "allowImportingTsExtensions": false,
-    "noEmit": false
+    "declaration": true,
+    "emitDeclarationOnly": false,
+    "noEmit": false,
+    "types": ["node"]
   },
-  "include": ["*.ts", "api", "examples/run.ts"],
+  "ts-node": {
+    "esm": true,
+    "experimentalSpecifierResolution": "node"
+  },
+  "include": ["**/*.ts", "main.js"],
   "exclude": ["node_modules", "dist"]
 }

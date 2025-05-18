@@ -1,10 +1,73 @@
 {
-  "name": "Grms automation act 1",
+  "name": "grms-automation",
+  "version": "1.0.0",
+  "description": "GRMS Automation Tool for browser automation",
+  "main": "main.js",
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "start": "tsx src/server.ts",
-    "postinstall": "playwright install"
+    "build": "tsc && copy /Y dist\\src\\server.js dist\\src\\server.mjs && node -e \"fs.writeFileSync('dist/src/package.json', JSON.stringify({ type: 'module' }))\"",
+    "build:css": "tailwindcss -i ./public/css/tailwind.css -o ./public/css/tailwind.css --minify",
+    "watch:css": "tailwindcss -i ./public/css/tailwind.css -o ./public/css/tailwind.css --watch --verbose",
+    "start": "npm run build:css && concurrently \"ts-node --esm src/server.ts\" \"electron .\"",
+    "build:win": "npm run build && npm run build:css && electron-builder --win",
+    "postinstall": "playwright install --with-deps",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.grms.automation",
+    "productName": "GRMS Automation",
+    "files": [
+      "dist/**/*",
+      "main.js",
+      "public/**/*",
+      "package.json",
+      ".env"
+    ],
+    "extraResources": [],
+    "extraFiles": [
+      {
+        "from": ".env",
+        "to": ".env",
+        "filter": ["**/*"]
+      }
+    ],
+    "asarUnpack": [
+      "node_modules/@playwright",
+      "node_modules/@browserbasehq",
+      "dist/src/server.js",
+      "dist/src/server.mjs",
+      "dist/src/index.js",
+      "dist/src/automation.js",
+      "dist/stagehand.config.js",
+      "dist/utils.js",
+      "node_modules/express",
+      "node_modules/cors",
+      "node_modules/body-parser",
+      "node_modules/dotenv",
+      "node_modules/@ai-sdk",
+      "node_modules/openai",
+      "node_modules/zod",
+      "node_modules/chalk",
+      "node_modules/boxen",
+      "node_modules/node-fetch"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "directories": {
+      "output": "release-builds"
+    }
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.22",
@@ -12,23 +75,31 @@
     "@browserbasehq/stagehand": "^2.2.1",
     "@google/generative-ai": "^0.24.1",
     "@playwright/test": "^1.49.1",
-    "@types/express": "^5.0.1",
     "ai": "^4.3.15",
     "body-parser": "^2.2.0",
     "boxen": "^8.0.1",
     "chalk": "^5.4.1",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
-    "express": "^5.1.0",
+    "express": "^4.18.2",
+    "node-fetch": "^3.3.2",
     "openai": "^4.97.0",
     "zod": "^3.24.4"
   },
   "devDependencies": {
     "@types/body-parser": "^1.19.5",
     "@types/cors": "^2.8.18",
+    "@types/express": "^4.17.21",
     "@types/node": "^22.15.17",
     "@types/react": "^19.1.3",
+    "autoprefixer": "^10.4.21",
     "concurrently": "^9.1.2",
+    "daisyui": "^4.12.24",
+    "electron": "^36.2.0",
+    "electron-builder": "^26.0.12",
+    "postcss": "^8.5.3",
+    "postcss-purgecss": "^5.0.0",
+    "tailwindcss": "^3.4.17",
     "ts-node": "^10.9.2",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3"

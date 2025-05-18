@@ -4,6 +4,27 @@ import chalk from "chalk";
 import boxen from "boxen";
 import { main } from "./automation.js";
 
+// Define type interfaces
+interface AutomationParams {
+  username: string;
+  password: string;
+  apiKey: string;
+}
+
+interface AutomationResult {
+  status: 'success' | 'error';
+  message: string;
+}
+
+// Define main function parameters type
+interface MainFunctionParams {
+  page: any; // Replace with proper type from Stagehand if available
+  context: any; // Replace with proper type from Stagehand if available
+  stagehand: Stagehand;
+  username: string;
+  password: string;
+}
+
 // Declare stagehand as a global variable
 let stagehand: Stagehand;
 
@@ -11,11 +32,7 @@ async function runAutomation({
   username,
   password,
   apiKey,
-}: {
-  username: string;
-  password: string;
-  apiKey: string;
-}) {
+}: AutomationParams): Promise<AutomationResult> {
   // Set the Google Generative AI API key
   process.env.GOOGLE_GENERATIVE_AI_API_KEY = apiKey;
 
@@ -64,11 +81,7 @@ export async function startAutomation({
   username,
   password,
   apiKey,
-}: {
-  username: string;
-  password: string;
-  apiKey: string;
-}) {
+}: AutomationParams): Promise<AutomationResult> {
   try {
     const result = await runAutomation({ username, password, apiKey });
     return result;

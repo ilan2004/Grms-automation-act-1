@@ -1,51 +1,73 @@
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
-import { startAutomation } from './index.ts';
+import { startAutomation } from './index.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
-// Load environment variables
 dotenv.config();
 
-// ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// Middleware
-app.use(cors());
+interface AutomationRequest {
+  username: string;
+  password: string;
+  apiKey: string;
+}
+
+app.use(cors({
+  origin: 'http://localhost',
+  methods: ['GET', 'POST']
+}));
 app.use(bodyParser.json());
 
-// Serve static files from public directory
-app.use(express.static(path.join(__dirname, '../')));
-
-// Serve index.html for root route
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../index.html'));
+app.use(express.static(path.join(__dirname, '../public')));
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
-// API endpoint for starting automation
-app.post('/api/start-automation', async (req, res) => {
-  const { username, password, apiKey } = req.body;
+app.get('/health', (req, res) => {
+  console.log('[SERVER] Health check requested');
+  res.json({ status: 'ok', port: process.env.PORT || 3132 });
+});
 
+app.post('/api/start-automation', (req, res) => {
+  console.log('[SERVER] Received automation request:', req.body);
+  const { username, password, apiKey } = req.body as AutomationRequest;
+  
   if (!username || !password || !apiKey) {
-    return res.status(400).json({ status: 'error', message: 'Missing required fields' });
+    console.error('[SERVER] Missing required fields');
+    return res.status(400).json({ 
+      status: 'error', 
+      message: 'Missing required fields' 
+    });
   }
-
-  try {
-    const result = await startAutomation({ username, password, apiKey });
-    res.json(result);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({ status: 'error', message: errorMessage });
-  }
+  
+  startAutomation({ username, password, apiKey })
+    .then(result => {
+      console.log('[SERVER] Automation result:', result);
+      res.json(result);
+    })
+    .catch(error => {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[SERVER] Automation error:', errorMessage);
+      res.status(500).json({ 
+        status: 'error', 
+        message: errorMessage 
+      });
+    });
 });
 
-// Start server
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3132;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`[SERVER] Running on port ${PORT}`);
+}).on('error', (err) => {
+  console.error('[SERVER] Failed to start:', err);
+  if ((err as { code?: string }).code === 'EADDRINUSE') {
+    console.error(`[SERVER] Port ${PORT} is in use. Please close other applications.`);
+  }
 });
