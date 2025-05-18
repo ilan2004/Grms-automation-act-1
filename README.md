@@ -1,41 +1,129 @@
-# 🤘 Welcome to Stagehand!
 
-Hey! This is a project built with [Stagehand](https://github.com/browserbase/stagehand).
 
-You can build your own web agent using: `npx create-browser-app`!
 
-## Setting the Stage
+          
+# GRMS Automation Tool
 
-Stagehand is an SDK for automating browsers. It's built on top of [Playwright](https://playwright.dev/) and provides a higher-level API for better debugging and AI fail-safes.
+## 🚀 Overview
 
-## Curtain Call
+GRMS Automation is a browser automation tool designed to automate interactions with the Garden City University's GRMS portal. It uses AI-powered browser automation to handle tasks like logging in, navigating the interface, and completing online assessments automatically.
 
-Get ready for a show-stopping development experience. Just run:
+## ✨ Features
+
+- **Automated Login**: Securely logs into the GRMS portal with provided credentials
+- **Assessment Navigation**: Automatically finds and starts available assessments
+- **AI-Powered Quiz Solving**: Uses Google's Gemini AI to analyze and answer quiz questions
+- **Multiple-Choice Support**: Handles both single-select and multiple-select questions
+- **Robust Error Handling**: Implements fallback strategies and retry mechanisms
+- **User-Friendly Interface**: Simple web interface to start automation with your credentials
+
+## 🛠️ Technology Stack
+
+- **Stagehand**: High-level browser automation SDK built on Playwright
+- **Google Gemini AI**: AI model for analyzing and answering quiz questions
+- **TypeScript/JavaScript**: Core programming languages
+- **Express.js**: Backend server for the web interface
+- **Electron**: Desktop application wrapper
+
+## 📋 Prerequisites
+
+- Node.js (v16 or higher)
+- npm or yarn
+- A Google Generative AI API key
+
+## 🚀 Getting Started
+
+### Installation
+
+1. Clone the repository
+2. Install dependencies:
 
 ```bash
-npm install && npm start
+npm install
 ```
 
-## What's Next?
-
-### Add your API keys
-
-Required API keys/environment variables are in the `.env.example` file. Copy it to `.env` and add your API keys.
+3. Set up environment variables:
 
 ```bash
-cp .env.example .env && nano .env # Add your API keys to .env
+cp .env.example .env
 ```
 
-### Custom .cursorrules
+4. Edit the `.env` file and add your Google Generative AI API key:
 
-We have custom .cursorrules for this project. It'll help quite a bit with writing Stagehand easily.
+```
+GOOGLE_GENERATIVE_AI_API_KEY=your_api_key_here
+```
 
-### Run on Browserbase
+### Running the Application
 
-To run on Browserbase, add your API keys to .env and change `env: "LOCAL"` to `env: "BROWSERBASE"` in [stagehand.config.ts](stagehand.config.ts).
+Start the application with:
 
-### Use Anthropic Claude 3.5 Sonnet
+```bash
+npm start
+```
 
-1. Add your API key to .env
-2. Change `modelName: "gpt-4o"` to `modelName: "claude-3-5-sonnet-latest"` in [stagehand.config.ts](stagehand.config.ts)
-3. Change `modelClientOptions: { apiKey: process.env.OPENAI_API_KEY }` to `modelClientOptions: { apiKey: process.env.ANTHROPIC_API_KEY }` in [stagehand.config.ts](stagehand.config.ts)
+This will launch both the Express server and the Electron application.
+
+## 💻 Usage
+
+1. Launch the application using `npm start`
+2. Enter your GRMS credentials (username and password)
+3. Enter your Google Generative AI API key
+4. Click "Start Automation"
+5. Watch as the automation completes your assessments
+
+## 🔧 Configuration
+
+The application can be configured through the `stagehand.config.ts` file:
+
+- **Model Selection**: Change the AI model used for answering questions
+- **Browser Settings**: Configure headless mode, viewport size, etc.
+- **Environment**: Run locally or on Browserbase cloud
+
+### Running on Browserbase
+
+To run on Browserbase:
+
+1. Add your API keys to `.env`
+2. Change `env: "LOCAL"` to `env: "BROWSERBASE"` in `stagehand.config.ts`
+
+### Using Alternative AI Models
+
+The application is configured to use Google's Gemini AI by default, but you can switch to other models:
+
+#### Using Anthropic Claude:
+
+1. Add your Anthropic API key to `.env`
+2. Change `modelName: "google/gemini-2.0-flash"` to `modelName: "claude-3-5-sonnet-latest"` in `stagehand.config.ts`
+3. Change `modelClientOptions: { apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY }` to `modelClientOptions: { apiKey: process.env.ANTHROPIC_API_KEY }` in `stagehand.config.ts`
+
+## 🏗️ Building for Distribution
+
+Build the application for Windows:
+
+```bash
+npm run build:win
+```
+
+## 🐳 Docker Support
+
+The application includes a Dockerfile for containerized deployment:
+
+```bash
+docker build -t grms-automation .
+docker run -p 3132:3132 grms-automation
+```
+
+## ⚠️ Disclaimer
+
+This tool is intended for educational purposes only. Please ensure you have permission to use automated tools with the GRMS system before proceeding.
+
+## 📄 License
+
+[MIT License](LICENSE)
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+        
